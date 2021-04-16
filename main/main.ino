@@ -1,7 +1,14 @@
-#define enA 3 //left front
-#define enB 5 //left back
+#define enA 3 //right back
+#define enB 5 //left front
 #define enC 6 //right front
-#define enD 9 //right back
+#define enD 9 //left back
+
+#define pwmA 60
+#define pwmB 60
+#define pwmC 60
+#define pwmD 60
+#define turnVar 40
+
 #define inA1 38
 #define inA2 39
 #define inB1 41
@@ -29,29 +36,45 @@ void setup() {
   pinMode(inD2, OUTPUT);
   stopMotors();
   
-  delay(2000);
+  delay(10000);
+  
+  forward();
+  delay(500);
+  slightLeft();
+  delay(1000);
+
+  forward();
+  delay(500);
+  slightLeft();
+  delay(1000);
+
+  forward();
+  delay(500);
+  slightRight();
+  delay(1000);
+
+  forward();
+  delay(500);
+  slightRight();
+  delay(1000);
+  
+  //forward();
+  //delay(4000);
+  stopMotors();
 }
  
 void loop() {
-  int throttle = 30;
 
-  if (readPING() > 10) {
-    forward(throttle);
-    Serial.println("Forward");
+  //if (readPING() > 10) {
+  //  forward();
+  //  Serial.println("Forward");
     
     
-  } else {
-    stopMotors();
-  }
+  //} else {
+  //  stopMotors();
+  //}
 
   delay(100);
-  //
-  
-  //back(throttle);
-  //Serial.println("Rev");
-  
-  //delay(5000);
-  //stopMotors();
   
 }
 
@@ -62,22 +85,35 @@ void stopMotors() {
   analogWrite(enD, 0);  
 }
 
-void forward(int throttle) {
-  setForward();
-  int an = map(throttle, 0, 100, 0, 255);
-  analogWrite(enA, an);
-  analogWrite(enB, an);
-  analogWrite(enC, an);
-  analogWrite(enD, an); 
+void slightRight() {
+  analogWrite(enA, pwmA - turnVar);
+  analogWrite(enB, pwmB + turnVar);
+  analogWrite(enC, pwmC - turnVar);
+  analogWrite(enD, pwmD + turnVar); 
 }
 
-void back(int throttle) {
+void slightLeft() {
+  analogWrite(enA, pwmA + turnVar);
+  analogWrite(enB, pwmB - turnVar);
+  analogWrite(enC, pwmC + turnVar);
+  analogWrite(enD, pwmD - turnVar); 
+}
+
+void motorOut() {
+  analogWrite(enA, pwmA);
+  analogWrite(enB, pwmB);
+  analogWrite(enC, pwmC);
+  analogWrite(enD, pwmD); 
+}
+
+void forward() {
+  setForward();
+  motorOut();
+}
+
+void back() {
   setBack();
-  int an = map(throttle, 0, 100, 0, 255);
-  analogWrite(enA, an);
-  analogWrite(enB, an);
-  analogWrite(enC, an);
-  analogWrite(enD, an); 
+  motorOut();
 }
 
 void setForward() {
