@@ -1,7 +1,6 @@
 #include <Pixy2.h>
 #include <PIDLoop.h>
 #include <Servo.h>
-//#include "Queue.h": #queue library
 
 /***************Variables***************/
 //Motor vars:
@@ -31,11 +30,17 @@ Servo servoMotor2;
 Pixy2 pixy;
 PIDLoop headingLoop(5000, 0, 0, false);
 
-//State vars:
-int state;                //current state of FSM
-//Queue<char> queue(10);  //queue of colors 'g', 'r', 'b', 'p', 'y'
-int userCommand;          //state of user-desired task
-char colorFollowing;      //current color path the robot is following
+//Program vars:
+int state;                            //current state of FSM
+int task;                             //state of user-desired task 
+
+//The robot will always navigate from start->ring->destination
+//colors are encoded as characters: 'g', 'r', 'b', 'p' and 'y'
+char paths[4] = {'g', 'r', 'b', 'p'}; //color of node paths
+char ring = 'y';                      //color of ring path
+char start;                           //color path that robot begins navigation 
+char destination;                     //color path of the destination node
+char curr;                            //color path that robot is currently following      
 /**************************************/
 
 void setup() {
@@ -66,7 +71,7 @@ void setup() {
   
   //initialize state variables:
   state = 0;
-
+  
   delay(2000);
 }
 
@@ -78,7 +83,11 @@ void loop() {
       stopMotors();
       if(userCommandRecieved()) {
         state = 1;
+      } 
+      else if(destinationReached()) { //assuming path will end slightly before destination is reached
+        state = task;
       }
+      break;
     }
     case 1: { //follow line
       int8_t res = pixy.line.getMainFeatures();
@@ -86,54 +95,103 @@ void loop() {
         stopMotors();
         state = 4; 
       }
-      if (res <= 0) { //no line detected, stall
+      else if(res <= 0) { //no line detected, stall
         state = 0;
       }
-      if (res&LINE_VECTOR) { //if line detected, follow the line
+      else if(res&LINE_VECTOR) { //if line detected, follow the line
         followLine();
       } 
-      if (res&LINE_INTERSECTION) {
-        stopMotors(); //stop and check color 
-        state = 3; //make navigation
+      else if(res&LINE_INTERSECTION) {
+        stopMotors(); //stop and check color
+        makeNavigation();
       }
-    }
-    case 2: { //find color path sequence 
-      //search path algorithm, obtain queue of colors to follow to reach destination
-    }
-    case 3: { //make navigation
-      //if (colorDetected() == colorFollowing) {
-          //is the color path the robot sees currently, the color path it was originally following?
-          //then, align to this path
-          //state = 1
-      //} else if (colorDetected() == queue.peek()) {
-          //is the color path the robot sees currently, the next color it needs to follow?
-          //colorFollowing = queue.pop(); //pop queue 
-          //then, align to this path
-          //state = 1
-      //} else if (queue.empty()) {
-          //final destination reached
-          //state = userCommand; 
-      //}
-    }
-    case 4: { //obstacle ovidance
+      break;
+    } 
+    case 2: { //obstacle ovidance
       //if obstacle detected, follow edge of obstacle
-      //switch to case 3 to continue to follow intended path
+      //re-find path, then
+      state = 1;
+      break;
     }
-    case 5: { //pick up vial
+    case 3: { //pick up vial
       pickUpVial();
+      resetVars();
+      state = 0;
+      break;
     }
-    case 6: { //drop off vial
+    case 4: { //drop off vial
       dropOffVial();
+      resetVars();
+      state = 0;
+      break;
     }
-    case 7: { //disinfect
+    case 5: { //disinfect
       disinfect();
+      resetVars();
+      state = 0;
+      break;
     }
-    case 8: { //check patient temperature
+    case 6: { //check patient temperature
       checkTemperature();
+      resetVars();
+      state = 0;
+      break;
     }
   }
 }
 
+/*************Wireless Function*************/
+boolean userCommandRecieved() {
+  //true when wireless module recieves user command
+  //update global "userCommand" variable to the state of the user-desired task (5-8)
+  //update "start" and "destination" chars with appropriate path colors
+  
+  //if wireless recieved {
+  //  start = colorDetected();
+  //  if (typedCommand == "pickup") {
+  //      destination = paths[0];
+  //      task = 3;
+  //  } else if (typedCommand == "dropoff") {
+  //      destination = paths[1]; 
+  //      task = 4;
+  //  } else if (typedCommand == "disinfect") {
+  //      destination = paths[2];
+  //      task = 5;
+  //  } else if (typedCommand == "temp") {
+  //      destination = paths[3];
+  //      task = 6;
+  //  } else { //typedCommand is unreadable
+  //      Serial.println("Please type command again:\n");
+  //      return false;
+  //  }
+  //  return true;
+  //}
+  
+  //return false; //no command received
+}
+
+/************Navigation Functions************/
+void makeNavigation() {
+  //robot will always navigate from start->ring->destination
+  if(curr == start) {                     //if robot was on starting path
+    if(colorDetected() == ring) {         //if ring detected, turn right
+      curr = ring;
+      pixy.line.setNextTurn(-90); 
+    }
+  } 
+  else if(curr == ring) {                 //if robot was on ring path
+    if(colorDetected() == destination) {  //if destination path detected, turn right
+      curr = destination;
+      pixy.line.setNextTurn(-90);
+    } else {                              //if irrelevant color paths detected, continue straight
+      pixy.line.setNextTurn(0);
+    }
+  } 
+}
+
+boolean destinationReached() {
+  return (curr == destination);
+}
 /***************Motor Functions**************/
 void stopMotors() {
   analogWrite(enA, 0);
@@ -214,30 +272,28 @@ boolean obstacleDetected() {
   return readPING() < 10;
 }
 
-/*************Wireless Function*************/
-boolean userCommandRecieved() {
-  //true when wireless module recieves user command
-  //update global "userCommand" variable to the state of the user-desired task (5-8)
-}
-
 /*************Pixy Functions***************/
 char colorDetected() {
   //returns color currently visible by Pixy
   pixy.changeProg("color_connected_components");
   pixy.ccc.getBlocks();
+  char color = ' ';
 
   if (pixy.ccc.numBlocks) {  
     int signature = (int32_t)pixy.ccc.blocks[0].m_signature; //color signature
 
     switch(signature) 
     {
-      case 1: { return 'g';} //signature 1: green
-      case 2: { return 'r';} //signature 2: red
-      case 3: { return 'b';} //signature 3: blue
-      case 4: { return 'p';} //signature 4: purple
-      case 5: { return 'y';} //signature 5: yellow
+      case 1: { color = 'g';} //signature 1: green
+      case 2: { color = 'r';} //signature 2: red
+      case 3: { color = 'b';} //signature 3: blue
+      case 4: { color = 'p';} //signature 4: purple
+      case 5: { color = 'y';} //signature 5: yellow
     }
   }
+  
+  pixy.changeProg("line");
+  return color; 
 }
 
 float followLine() { //refer to line_zumo_demo.ino example Pixy2
@@ -286,7 +342,7 @@ float followLine() { //refer to line_zumo_demo.ino example Pixy2
   delay(100);                       //**adjust!
 }
 
-/*************Component/Task Functions*************/
+/**********Component/Task Functions**********/
 void dropOffVial() {
 }
 
@@ -307,4 +363,12 @@ void disinfect(){
 }
 
 void checkTemperature() {
+}
+
+/*******************Reset******************/
+void resetVars() {
+  start = ' ';
+  destination = ' '; 
+  curr = ' '; 
+  task = 0; 
 }
