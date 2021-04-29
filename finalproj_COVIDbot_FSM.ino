@@ -1,6 +1,9 @@
 #include <Pixy2.h>
 #include <PIDLoop.h>
 #include <Servo.h>
+#include <SPI.h>
+#include <nRF24L01.h> 
+#include <RF24.h>
 
 /***************Variables***************/
 //Motor vars:
@@ -23,12 +26,14 @@
 
 //Misc. sensor/actuator vars:
 #define Ping 4
-#define servoPin 7
-#define servoPin2 8
+#define servoPin 11
+#define servoPin2 12
 Servo servoMotor;
 Servo servoMotor2;
 Pixy2 pixy;
 PIDLoop headingLoop(5000, 0, 0, false);
+RF24 radio(7, 8);                     // CE, CSN pins     
+const byte address[6] = "00001";
 
 //Program vars:
 int state;                            //current state of FSM
@@ -44,6 +49,7 @@ char curr;                            //color path that robot is currently follo
 /**************************************/
 
 void setup() {
+  Serial.begin(9600);
   Serial.println("Starting up...");
 
   //initialize motors
@@ -68,6 +74,12 @@ void setup() {
   //initialize servo motors:
   servoMotor.attach(servoPin);
   servoMotor2.attach(servoPin2);
+
+  //begin wireless communication
+  radio.begin();
+  radio.openReadingPipe(0, address);
+  radio.setPALevel(RF24_PA_MIN);
+  radio.startListening();
   
   //initialize state variables:
   state = 0;
@@ -143,31 +155,29 @@ void loop() {
 /*************Wireless Function*************/
 boolean userCommandRecieved() {
   //true when wireless module recieves user command
-  //update global "userCommand" variable to the state of the user-desired task (5-8)
+  //update global "userCommand" variable to the state of the user-desired task (3-6)
   //update "start" and "destination" chars with appropriate path colors
   
-  //if wireless recieved {
-  //  start = colorDetected();
-  //  if (typedCommand == "pickup") {
-  //      destination = paths[0];
-  //      task = 3;
-  //  } else if (typedCommand == "dropoff") {
-  //      destination = paths[1]; 
-  //      task = 4;
-  //  } else if (typedCommand == "disinfect") {
-  //      destination = paths[2];
-  //      task = 5;
-  //  } else if (typedCommand == "temp") {
-  //      destination = paths[3];
-  //      task = 6;
-  //  } else { //typedCommand is unreadable
-  //      Serial.println("Please type command again:\n");
-  //      return false;
-  //  }
-  //  return true;
-  //}
-  
-  //return false; //no command received
+  if (radio.available()) {
+    char cmd[32] = "";
+    radio.read(&cmd, sizeof(cmd));
+    start = colorDetected();
+    if(strcmp(cmd,"pickup") == 0) {
+      destination = paths[0];
+      task = 3;
+    } else if (strcmp(cmd,"dropoff") == 0) {
+      destination = paths[1]; 
+      task = 4;
+    } else if (strcmp(cmd,"disinfect") == 0) {
+      destination = paths[2];
+      task = 5;
+    } else if (strcmp(cmd,"temp") == 0) {
+      destination = paths[3];
+      task = 6;
+    } 
+    return true;
+  }
+  return false;
 }
 
 /************Navigation Functions************/
