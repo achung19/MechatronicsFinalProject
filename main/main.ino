@@ -1,66 +1,86 @@
+#include <Servo.h>
+#include <PID_v1.h>
+
+#define gServo 10
+#define baseServo1 11
+#define baselineGrip 85
+
+#define IRpin A0
+
 #define enA 3 //right back
-#define enB 5 //left front
-#define enC 6 //right front
+//#define enB 5 //left front
+//#define enC 6 //right front
 #define enD 9 //left back
 
-#define pwmA 60
-#define pwmB 60
-#define pwmC 60
-#define pwmD 60
+#define pwmA 100
 #define turnVar 40
 
 #define inA1 38
 #define inA2 39
-#define inB1 41
-#define inB2 40
-#define inC1 45
-#define inC2 44
+//#define inB1 41
+//#define inB2 40
+//#define inC1 45
+//#define inC2 44
 #define inD1 46
 #define inD2 47
 
 #define Ping 4
 
+Servo gripperServo;
+Servo baseServo;
+
+double Setpoint, Input, Output;
+double Kp=2.1, Ki=0, Kd=0;
+
+PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
+
+
+
 void setup() {
+
+  myPID.SetMode(AUTOMATIC);
+  myPID.SetOutputLimits(-85, 85);
+  myPID.SetSampleTime(25);
+  Setpoint = 20;
+  
+  baseServo.attach(baseServo1);
+  
   Serial.begin(9600);
   pinMode(enA, OUTPUT);
-  pinMode(enB, OUTPUT);
-  pinMode(enC, OUTPUT);
+  //pinMode(enB, OUTPUT);
+  //pinMode(enC, OUTPUT);
   pinMode(enD, OUTPUT);
   pinMode(inA1, OUTPUT);
   pinMode(inA2, OUTPUT);
-  pinMode(inB1, OUTPUT);
-  pinMode(inB2, OUTPUT);
-  pinMode(inC1, OUTPUT);
-  pinMode(inC2, OUTPUT);
+  //pinMode(inB1, OUTPUT);
+  //pinMode(inB2, OUTPUT);
+  //pinMode(inC1, OUTPUT);
+  //pinMode(inC2, OUTPUT);
   pinMode(inD1, OUTPUT);
   pinMode(inD2, OUTPUT);
   stopMotors();
   
-  delay(10000);
-  
-  forward();
-  delay(500);
-  slightLeft();
-  delay(1000);
-
-  forward();
-  delay(500);
-  slightLeft();
-  delay(1000);
-
-  forward();
-  delay(500);
-  slightRight();
-  delay(1000);
-
-  forward();
-  delay(500);
-  slightRight();
-  delay(1000);
+  delay(5000);
+ 
+  //threePointTurn();
   
   //forward();
-  //delay(4000);
-  stopMotors();
+  //right();
+  //left();
+  //slightLeft();
+  //delay(1000);
+  //slightRight();
+  //baseServo.write(0);
+  //Serial.println("0");
+  //releaseGripper();
+  //grip();
+
+  delay(5000); 
+  
+  pickUp();
+  delay(3000);
+  deposit();
+  
 }
  
 void loop() {
@@ -73,67 +93,186 @@ void loop() {
   //} else {
   //  stopMotors();
   //}
+  //nudgeFollow();
+  
 
-  delay(100);
+  
+  delay(50);
   
 }
 
-void stopMotors() {
-  analogWrite(enA, 0);
-  analogWrite(enB, 0);
-  analogWrite(enC, 0);
-  analogWrite(enD, 0);  
-}
-
-void slightRight() {
-  analogWrite(enA, pwmA - turnVar);
-  analogWrite(enB, pwmB + turnVar);
-  analogWrite(enC, pwmC - turnVar);
-  analogWrite(enD, pwmD + turnVar); 
+void nudgeFollow() {
+  double ir = IRDistance();
+  double ping = readPING();
+  if (ping < 10) {
+    stopMotors();
+    delay(500);
+    right();
+    forward();
+    delay(1000);
+  } else if (ping < 35) {
+    while (readPING() > 15) {
+      forward();
+      delay(20);
+    }
+  } 
+  /*else if (ir > 25) {
+    int counter = 0;
+    stopMotors();
+    delay(500);
+    for (int i = 0; i < 3; i++) {
+      forward();
+      delay(100);
+      ir = IRDistance();
+      if (ir > 25) {
+        counter++;
+      }
+    } 
+    if (counter > 2) {
+      stopMotors();
+      delay(500);
+      left();
+      forward();
+      delay(1000);
+    }
+  } */
+  else if (ir > 20) {
+    slightLeft();
+  } else if (ir < 10) {
+    slightRight();
+  } else {
+    forward();
+    delay(50);
+  }
 }
 
 void slightLeft() {
-  analogWrite(enA, pwmA + turnVar);
-  analogWrite(enB, pwmB - turnVar);
-  analogWrite(enC, pwmC + turnVar);
-  analogWrite(enD, pwmD - turnVar); 
+  stopMotors();
+  delay(500);
+  motorOut(100, -100);
+  delay(350);
+  motorOut(90, 90);
+  delay(500);
+  stopMotors();
+  delay(500);
 }
 
-void motorOut() {
-  analogWrite(enA, pwmA);
-  analogWrite(enB, pwmB);
-  analogWrite(enC, pwmC);
-  analogWrite(enD, pwmD); 
+void slightRight() {
+  stopMotors();
+  delay(500);
+  motorOut(-100, 100);
+  delay(250);
+  motorOut(90, 90);
+  delay(500);
+  stopMotors();
+  delay(500);
+}
+
+void PIDfollow() {
+  Input = IRDistance();
+  if (Input > 25) {
+    int counter = 0;
+    stopMotors();
+    delay(1000);
+    for (int i = 0; i < 10; i++) {
+      forward();
+      delay(100);
+      Input = IRDistance();
+      if (Input > 25) {
+        counter++;
+      }
+    } 
+    if (counter > 9) {
+      stopMotors();
+      delay(1000);
+      left();
+      forward();
+      delay(1000);
+    }
+  } else {
+    myPID.Compute();
+    int right = pwmA - Output;
+    int left = pwmA + Output;
+    //if (right == 0) {
+      //right = -100;
+      //left = 150;
+    //} else if (left == 0) {
+      //left = -100;
+      //right = 150;
+    //}
+    motorOut(right, left);
+  }
+}
+
+void stopMotors() {
+  motorOut(0, 0);  
+}
+
+void motorOut(int right, int left) {
+  if (right < 0) {
+    rightBack();
+  } else {
+    rightForward();
+  }
+  if (left < 0) {
+    leftBack();
+  } else {
+    leftForward();
+  }
+
+  analogWrite(enA, abs(right));
+  //analogWrite(enB, abs(left));
+  //analogWrite(enC, abs(right));
+  analogWrite(enD, abs(left)); 
+  Serial.println(String(right) + " , " + String(left));
 }
 
 void forward() {
-  setForward();
-  motorOut();
+  motorOut(pwmA, pwmA);
+}
+
+void right() {
+  motorOut(-100, 100);
+  delay(700);
+  stopMotors();
+  delay(500);
+}
+
+void left() {
+  motorOut(100, -100);
+  delay(700);
+  stopMotors();
+  delay(500);
 }
 
 void back() {
-  setBack();
-  motorOut();
+  motorOut(-pwmA, -pwmA);
 }
 
-void setForward() {
+void rightForward() {
   digitalWrite(inA1, LOW);
   digitalWrite(inA2, HIGH);
-  digitalWrite(inB1, LOW);
-  digitalWrite(inB2, HIGH);
-  digitalWrite(inC1, LOW);
-  digitalWrite(inC2, HIGH);
+  //digitalWrite(inC1, LOW);
+  //digitalWrite(inC2, HIGH);
+}
+
+void leftForward() {
+  //digitalWrite(inB1, LOW);
+  //digitalWrite(inB2, HIGH);
   digitalWrite(inD1, LOW);
   digitalWrite(inD2, HIGH);
 }
 
-void setBack() {
+void rightBack() {
   digitalWrite(inA1, HIGH);
   digitalWrite(inA2, LOW);
-  digitalWrite(inB1, HIGH);
-  digitalWrite(inB2, LOW);
-  digitalWrite(inC1, HIGH);
-  digitalWrite(inC2, LOW);
+  //digitalWrite(inC1, HIGH);
+  //digitalWrite(inC2, LOW);
+}
+
+void leftBack() {
+  //digitalWrite(inB1, HIGH);
+  //digitalWrite(inB2, LOW);
   digitalWrite(inD1, HIGH);
   digitalWrite(inD2, LOW);
 }
@@ -163,4 +302,108 @@ float readPING() {
   //read the front distance of the robot (PING)
   float a = 343.0 * measureDistance() / 1000000 / 2 * 100;
   return a;
+}
+
+void pickUp() {
+  releaseGripper();
+  lowerGripper();
+  forwardSlow();
+  delay(1000);
+  stopMotors();
+  delay(1000);
+  grip();
+  delay(1000);
+  backSlow();
+  delay(1000);
+  stopMotors();
+  liftGripper();
+}
+
+void deposit() {
+  lowerGripper();
+  forwardSlow();
+  delay(1000);
+  stopMotors();
+  delay(1000);
+  releaseGripper();
+  backSlow();
+  delay(1000);
+  stopMotors();
+  delay(1000);
+  liftGripper();
+  grip();
+}
+
+void releaseGripper() {
+  gripperServo.detach();
+  gripperServo.attach(gServo);
+  delay(2000);
+  for (int i = gripperServo.read(); i > 80; i--) {
+    gripperServo.write(i);
+    delay(100);
+    Serial.println(gripperServo.read());
+  }
+  delay(2000);
+}
+
+void grip() {
+  for (int i = gripperServo.read(); i < 105; i++) {
+    gripperServo.write(i);
+    delay(100);
+    Serial.println(gripperServo.read());
+  }
+  delay(2000);
+}
+
+void liftGripper() {
+  for (int i = baseServo.read(); i < 105; i++) {
+    baseServo.write(i);
+    delay(30);
+    Serial.println(baseServo.read());
+  }
+  delay(2000);
+}
+
+void lowerGripper() {
+  for (int i = baseServo.read(); i > -1; i--) {
+    baseServo.write(i);
+    delay(30);
+    Serial.println(baseServo.read());
+  }
+  delay(2000);
+}
+
+
+float IRDistance() {
+  float volt = analogRead(IRpin) * 0.0048828125;
+  //return volt;
+  float dist = 1.9735 * volt * volt - 15.378 * volt + 35.352;
+  Serial.println(dist);
+  return dist;
+}
+
+void backSlow() {
+  for (int i = 0; i > -69; i--) {
+    motorOut(i, i);
+    delay(20);
+  }
+
+  delay(1000);
+  for (int i = -69; i < 0; i++) {
+    motorOut(i, i);
+    delay(20);
+  }
+}
+
+void forwardSlow() {
+  //for (int i = 0; i < 80; i++) {
+  //  motorOut(i, i);
+  motorOut(85, 89);
+  //  delay(20);
+  //}
+  delay(250);
+  for (int i = 87; i > 0; i--) {
+    motorOut(i, i);
+    delay(10);
+  }
 }

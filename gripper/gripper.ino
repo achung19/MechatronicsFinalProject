@@ -1,34 +1,42 @@
 #include <Servo.h>
 
-#define gServo 9
-#define baseServo1 10
+#define gServo 10
+#define baseServo1 11
 #define baselineGrip 85
+
+#define IRpin A0
 
 Servo gripperServo;
 Servo baseServo;
 
 void setup() {
   Serial.begin(9600);
-  gripperServo.attach(gServo);
-  baseServo.attach(baseServo1);
-  
-  
+  //gripperServo.attach(gServo);
+  //baseServo.attach(baseServo1);
+
 }
 
 void loop() {
-  
-  
-  releaseGripper();
-  lowerGripper();
-  grip();
-  liftGripper();
+  //pickUp();
+  //delay(5000);
+  //deposit();
 
-  delay(5000);
+  Serial.println(IRDistance());
+  delay(500);
+}
+
+void pickUp() {
+  releaseGripper();
+  lowerGripper();
+  grip();
+  liftGripper();
+}
+
+void deposit() {
   lowerGripper();
   releaseGripper();
   liftGripper();
   grip();
-  
 }
 
 void releaseGripper() {
@@ -68,4 +76,11 @@ void lowerGripper() {
     Serial.println(gripperServo.read());
   }
   delay(2000);
+}
+
+
+float IRDistance() {
+  float volt = analogRead(IRpin) * 0.0048828125;
+  //return volt;
+  return 1.9735 * volt * volt - 15.378 * volt + 35.352;
 }
