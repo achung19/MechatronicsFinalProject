@@ -1,5 +1,17 @@
 #include <Servo.h>
 #include <PID_v1.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_MLX90614.h>
+
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+#define SCREEN_ADDRESS 0x3C
+Adafruit_SSD1306 display = Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 #define gServo 10
 #define baseServo1 11
@@ -34,9 +46,10 @@ double Kp=2.1, Ki=0, Kd=0;
 
 PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
-
-
 void setup() {
+
+  mlx.begin(); 
+  displayInit();
 
   myPID.SetMode(AUTOMATIC);
   myPID.SetOutputLimits(-85, 85);
@@ -47,39 +60,24 @@ void setup() {
   
   Serial.begin(9600);
   pinMode(enA, OUTPUT);
-  //pinMode(enB, OUTPUT);
-  //pinMode(enC, OUTPUT);
   pinMode(enD, OUTPUT);
   pinMode(inA1, OUTPUT);
   pinMode(inA2, OUTPUT);
-  //pinMode(inB1, OUTPUT);
-  //pinMode(inB2, OUTPUT);
-  //pinMode(inC1, OUTPUT);
-  //pinMode(inC2, OUTPUT);
   pinMode(inD1, OUTPUT);
   pinMode(inD2, OUTPUT);
   stopMotors();
   
   delay(5000);
- 
-  //threePointTurn();
-  
-  //forward();
-  //right();
-  //left();
-  //slightLeft();
-  //delay(1000);
-  //slightRight();
-  //baseServo.write(0);
-  //Serial.println("0");
-  //releaseGripper();
-  //grip();
 
-  delay(5000); 
+
+  //displayString("Hello", 5000, 1);
+  //displayString("world", 0, 0);
   
-  pickUp();
-  delay(3000);
-  deposit();
+  //pickUp();
+  //delay(3000);
+  //deposit();
+
+  takeTemp();
   
 }
  
@@ -89,7 +87,7 @@ void loop() {
   //  forward();
   //  Serial.println("Forward");
     
-    
+  //Serial.println(mlx.readObjectTempF());  
   //} else {
   //  stopMotors();
   //}
@@ -406,4 +404,45 @@ void forwardSlow() {
     motorOut(i, i);
     delay(10);
   }
+}
+
+void displayString(String str, int dly, boolean clr) {
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println(str);
+  display.display();
+
+  if (clr) {
+    delay(dly);
+    display.clearDisplay();
+    display.display();
+  }
+}
+
+void displayInit() {
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+  delay(2000);
+  display.clearDisplay();
+  display.setTextSize(1);             // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE);        // Draw white text
+  display.setCursor(0,0);             // Start at top-left corner
+  display.display();
+}
+
+void takeTemp() {
+  lowerGripper();
+  delay(3000);
+  double init_temp = mlx.readObjectTempF();
+  displayString("Please place wrist under the gripper arm.", 0, 0);
+  while (mlx.readObjectTempF() < init_temp + 8) {
+    Serial.println(mlx.readObjectTempF());
+    delay(100);
+  }
+  Serial.println(mlx.readObjectTempF());
+  displayString("Currently Reading Temperature. Please do not move your arm...", 3000, 1);
+  displayString("Your Temperature is \n" + String(mlx.readObjectTempF()) + " °F.", 5000, 1);
+  liftGripper();
 }
