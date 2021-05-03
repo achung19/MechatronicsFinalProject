@@ -152,17 +152,16 @@ void lineFollowingTest() {
   int8_t res = pixy.line.getMainFeatures();
   if(res <= 0) { //no line detected, stall
     Serial.println("no line detected...switching to stall");
-  }
-  else if(res&LINE_VECTOR) { //if line detected, follow the line
-    followLine();
-  } 
-  else if(res&LINE_INTERSECTION) {
+  } else if(res&LINE_INTERSECTION) {
     Serial.println("DETECTED INTERSECTION");
     stopMotors(); //stop and check color
     Serial.print("detected: ");
       Serial.println(colorDetected());
     pixy.line.setNextTurn(-90);
-  }
+    followLine();
+  } else if(res&LINE_VECTOR) { //if line detected, follow the line
+    followLine();
+  } 
   delay(1000);
 }
 /*************Wireless Function*************/
@@ -315,6 +314,7 @@ boolean obstacleDetected() {
 char colorDetected() {
   //returns color currently visible by Pixy
   pixy.changeProg("color_connected_components");
+  delay(5000); //delay after program change
   pixy.ccc.getBlocks();
   char color = ' ';
 
@@ -332,6 +332,7 @@ char colorDetected() {
   }
   
   pixy.changeProg("line");
+  delay(5000); //delay after program change
   return color; 
 }
 
