@@ -7,18 +7,15 @@
 
 /***************Variables***************/
 //Motor vars:
-#define enA 3 //left front
-#define enB 5 //left back
-#define enC 6 //right front
-#define enD 9 //right back
+#define enA 3 //right back
+#define enD 9 //left back
+#define pwmA 100
 #define inA1 38
 #define inA2 39
-#define inB1 41
-#define inB2 40
-#define inC1 45
-#define inC2 44
 #define inD1 46
 #define inD2 47
+
+
 //Motor speeds, maximum allowed is 255:
 #define SPEED_FAST        150 //**adjust!
 #define SPEED_SLOW        100 //**adjust!
@@ -54,15 +51,9 @@ void setup() {
 
   //initialize motors
   pinMode(enA, OUTPUT);
-  pinMode(enB, OUTPUT);
-  pinMode(enC, OUTPUT);
   pinMode(enD, OUTPUT);
   pinMode(inA1, OUTPUT);
   pinMode(inA2, OUTPUT);
-  pinMode(inB1, OUTPUT);
-  pinMode(inB2, OUTPUT);
-  pinMode(inC1, OUTPUT);
-  pinMode(inC2, OUTPUT);
   pinMode(inD1, OUTPUT);
   pinMode(inD2, OUTPUT);
   stopMotors();
@@ -82,7 +73,7 @@ void setup() {
   radio.startListening();
   
   //initialize state variables:
-  state = 0;
+  state = -1;
   
   delay(2000);
 }
@@ -91,9 +82,13 @@ void loop() {
 
   switch(state) 
   {
+    case -1: { //test pixy line following program
+      lineFollowingTest();
+      break;
+    }
     case 0: { //awaiting a command/stop
       stopMotors();
-      if(userCommandReceived()) {
+      if(userCommandRecieved()) {
         state = 1;
       } 
       else if(destinationReached()) { //assuming path will end slightly before destination is reached
@@ -152,8 +147,25 @@ void loop() {
   }
 }
 
+/******************Test*********************/
+void lineFollowingTest() {
+  int8_t res = pixy.line.getMainFeatures();
+  if(res <= 0) { //no line detected, stall
+    Serial.println("no line detected...switching to stall");
+  } else if(res&LINE_INTERSECTION) {
+    Serial.println("DETECTED INTERSECTION");
+    stopMotors(); //stop and check color
+    Serial.print("detected: ");
+      Serial.println(colorDetected());
+    pixy.line.setNextTurn(-90);
+    followLine();
+  } else if(res&LINE_VECTOR) { //if line detected, follow the line
+    followLine();
+  } 
+  delay(1000);
+}
 /*************Wireless Function*************/
-boolean userCommandReceived() {
+boolean userCommandRecieved() {
   //true when wireless module recieves user command
   //update global "userCommand" variable to the state of the user-desired task (3-6)
   //update "start" and "destination" chars with appropriate path colors
@@ -202,53 +214,69 @@ void makeNavigation() {
 boolean destinationReached() {
   return (curr == destination);
 }
+
 /***************Motor Functions**************/
+void motorOut(int right, int left) {
+  if (right < 0) {
+    rightBack();
+  } else {
+    rightForward();
+  }
+  if (left < 0) {
+    leftBack();
+  } else {
+    leftForward();
+  } 
+  analogWrite(enA, abs(right));
+  analogWrite(enD, abs(left)); 
+  Serial.println(String(right) + " , " + String(left));
+}
+  
 void stopMotors() {
-  analogWrite(enA, 0);
-  analogWrite(enB, 0);
-  analogWrite(enC, 0);
-  analogWrite(enD, 0);  
+  motorOut(0, 0);  
 }
 
-void forward(int throttle) {
-  setForward();
-  int an = map(throttle, 0, 100, 0, 255);
-  analogWrite(enA, an);
-  analogWrite(enB, an);
-  analogWrite(enC, an);
-  analogWrite(enD, an); 
+void forward() {
+  motorOut(pwmA, pwmA);
 }
 
-void back(int throttle) {
-  setBack();
-  int an = map(throttle, 0, 100, 0, 255);
-  analogWrite(enA, an);
-  analogWrite(enB, an);
-  analogWrite(enC, an);
-  analogWrite(enD, an); 
+void right() {
+  motorOut(-100, 100);
+  delay(700);
+  stopMotors();
+  delay(500);
 }
 
-void setForward() {
+void left() {
+  motorOut(100, -100);
+  delay(700);
+  stopMotors();
+  delay(500);
+}
+
+void back() {
+  motorOut(-pwmA, -pwmA);
+}
+
+void rightForward() {
   digitalWrite(inA1, LOW);
   digitalWrite(inA2, HIGH);
-  digitalWrite(inB1, LOW);
-  digitalWrite(inB2, HIGH);
-  digitalWrite(inC1, LOW);
-  digitalWrite(inC2, HIGH);
+}
+
+void leftForward() {
   digitalWrite(inD1, LOW);
   digitalWrite(inD2, HIGH);
 }
 
-void setBack() {
+void rightBack() {
   digitalWrite(inA1, HIGH);
   digitalWrite(inA2, LOW);
-  digitalWrite(inB1, HIGH);
-  digitalWrite(inB2, LOW);
-  digitalWrite(inC1, HIGH);
-  digitalWrite(inC2, LOW);
+}
+
+void leftBack() {
   digitalWrite(inD1, HIGH);
   digitalWrite(inD2, LOW);
-} 
+}
 
 /*************Distance Functions*************/
 unsigned long measureDistance() {
@@ -286,6 +314,7 @@ boolean obstacleDetected() {
 char colorDetected() {
   //returns color currently visible by Pixy
   pixy.changeProg("color_connected_components");
+  delay(5000); //delay after program change
   pixy.ccc.getBlocks();
   char color = ' ';
 
@@ -303,6 +332,7 @@ char colorDetected() {
   }
   
   pixy.changeProg("line");
+  delay(5000); //delay after program change
   return color; 
 }
 
@@ -344,11 +374,8 @@ float followLine() { //refer to line_zumo_demo.ino example Pixy2
     right -= SPEED_SLOW;  
   } 
 
-  //set left and right motor speeds
-  analogWrite(enA, left);
-  analogWrite(enB, left);
-  analogWrite(enC, right);
-  analogWrite(enD, right);
+  //set right and left motor speeds
+  motorOut(right, left);
   delay(100);                       //**adjust!
 }
 

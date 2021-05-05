@@ -5,11 +5,13 @@
 RF24 radio(7, 8); // CE, CSN pins
 const byte address[6] = "00001";
 
-#define numCommands 5
-const char *validCmd[numCommands] = {"pickup", "dropoff", "disinfect", "temp", "obs"};
+#define numCommands 10
+const char *validCmd[numCommands] = {"pickup", "dropoff", "disinfect", "temp", "obs", "line", "test1", "test2", "test3", "color"};
+String substr[4] = {"turn:+", "straight:+", "turn:-", "straight:-"};
 
 void setup() {
   Serial.begin(9600);
+  //HC12.begin(9600);
   radio.begin();
   setRadioRead();
 }
@@ -20,7 +22,7 @@ void loop() {
   if (radio.available()) {
     char text[64] = "";
     radio.read(&text, sizeof(text));
-    Serial.println(text);
+    Serial.println("Received: " + String(text));
   }
   
   if(Serial.available() > 0) {
@@ -32,7 +34,7 @@ void loop() {
     char cmd[str_len];
     str.toCharArray(cmd, str_len);
 
-    if(isValid(cmd)){
+    if(isValid(cmd, str)){
       radio.write(&cmd, sizeof(cmd));
       Serial.println("Sent: " + String(cmd));
     } else {
@@ -45,16 +47,23 @@ void loop() {
   
 }
 
-boolean isValid(char cmd[]) {
+boolean isValid(char cmd[], String str) {
   
   for (int i = 0; i < numCommands; i++) {
     if (strcmp(cmd,validCmd[i]) == 0) {
       return 1;
     }
   }
+
+  for (int i = 0; i < 4; i++) {
+    if (str.substring(0, substr[i].length()) == substr[i]) {
+      return 1;
+    }
+  }
   return 0;
  
 }
+
 
 void setRadioWrite() {
   radio.openWritingPipe(address);
