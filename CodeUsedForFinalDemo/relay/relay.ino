@@ -1,3 +1,7 @@
+/*
+ * code for relay arduino on the robot, parses SPI commands from radio into serial commands
+ */
+
 #include <SoftwareSerial.h>
 #include <SPI.h>
 #include <nRF24L01.h> 
@@ -13,17 +17,18 @@ void setup() {
   Serial.begin(9600);             // Serial port to computer
   relay.begin(9600);               // Serial port to HC12
 
+  //set the default radio mode to be reading commands from the command station
   radio.begin();
   setRadioRead();
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW);
   
 }
 void loop() {
 
-
+  //set the default radio mode to be reading commands from the command station
   setRadioRead();
 
+
+  //when a radio command is received (already checked by command station), relay to robot via software serial link
   if (radio.available()) {
     char cmd[32] = "";
     radio.read(&cmd, sizeof(cmd));
@@ -35,14 +40,13 @@ void loop() {
       relay.println(String(cmd));
       //displayString("Received: " + String(cmd), 0, 0);
       //if (String(cmd) == "line") {
-        Serial.println("LED");
-        digitalWrite(2, HIGH);
-        delay(1000);
-        digitalWrite(2, LOW);
+      delay(1000);
       //}
     }
   } 
-  
+
+  //check to see there are messages from the robot that need to be relayed back to command station
+  //if so, relay back via radio
   if (relay.available()) {        // If HC-12 has data
     String str = Serial.readStringUntil('\n');
     if (str != "") {
@@ -61,7 +65,7 @@ void loop() {
 
 
 
-
+//functions for setting radio modes and sending messages via radio.
 void setRadioWrite() {
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_MIN);

@@ -1,3 +1,9 @@
+/*
+ * main code for the robot in its full FSM state
+ */
+
+/*****************************Libraries*******************************/
+
 #include <Servo.h> 
 #include <PID_v1.h>                     
 #include <Wire.h>
@@ -72,6 +78,9 @@ char curr;                            //color path that robot is currently follo
 /*********************************************************************/
 
 void setup() {
+
+  //initialize serial connections for debugging and to relay arduino
+  //Serial1 is the serial connection to relay arduino (using MEGA's dedicated serial ports)
   Serial.begin(9600);
   Serial1.begin(9600);
   Serial.println("Starting up...");
@@ -116,14 +125,13 @@ void setup() {
   
   //initialize state variables:
   state = 0;
-  
-  //misc:
-  pinMode(2, OUTPUT);
-  digitalWrite(2, LOW);
+ 
   delay(5000);
 
 }
 
+
+//main FSM function, used as main frame for the robot control flow
 void loop() {
 
   switch(state) 
@@ -237,8 +245,11 @@ boolean userCommandRecieved() {
 }
 
 void radioSend(String str) {
+  //to send a message back to the command station, send string through serial to the relay arduino
+  //see relay.ino
   Serial1.println(str);
 }
+
 /**************************Display Functions**************************/
 void displayInit() {
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
@@ -253,6 +264,8 @@ void displayInit() {
   display.display();
 }
 
+//set the display to display a certain string
+//boolean option is there to allow the display to pause all robot operations while a message is live before clearing the message
 void displayString(String str, int dly, boolean clr) {
   display.clearDisplay();
   display.setCursor(0,0);
@@ -290,6 +303,8 @@ boolean destinationReached() {
 }
 
 /************************Basic Motor Functions*************************/
+//motor actuation for front 2 wheels
+//depending on the motor values, change the motor directions
 void motorOut(int right, int left) {
   if (right < 0) {
     rightBack();
@@ -303,33 +318,11 @@ void motorOut(int right, int left) {
   } 
   analogWrite(enA, abs(right));
   analogWrite(enD, abs(left)); 
-  Serial.println(String(right) + " , " + String(left));
+  //Serial.println(String(right) + " , " + String(left));
 }
   
 void stopMotors() {
   motorOut(0, 0);  
-}
-
-void forward() {
-  motorOut(pwmA, pwmA);
-}
-
-void right() {
-  motorOut(-100, 100);
-  delay(700);
-  stopMotors();
-  delay(500);
-}
-
-void left() {
-  motorOut(100, -100);
-  delay(700);
-  stopMotors();
-  delay(500);
-}
-
-void back() {
-  motorOut(-pwmA, -pwmA);
 }
 
 void rightForward() {
@@ -353,6 +346,12 @@ void leftBack() {
 }
 
 /*********************Advanced Motor Functions************************/
+
+//function for the obstacle avoidance navigation function
+//robot will go forward until it reaches the obstacle
+//make a right turn to face the IR sensor to the obstacle
+//continue to follow the edge of the obstacle by keeping the detected obstacle within 11 to 25 cm to the IR sensor
+//if the obstacle suddenly disappears, we assume we just passed a corner of the obstacle, so make a left turn
 void nudgeFollow(unsigned long t) {
   radioSend("robot following obstacle edge");
   displayString("following obstacle for " + String(t/1000.0) + " s", 2000, 1);
@@ -413,6 +412,8 @@ void slightRight() {
   delay(500);
 }
 
+
+//main function for using IMU and PID for a yaw controlled turning motion
 void turn(int angle) {
   double starting = getYaw();
   double targetAbs = getAbs(starting, angle);
@@ -430,6 +431,7 @@ void turn(int angle) {
     Input = getRel(cur, targetAbs);
    
     myPID.Compute();
+    //adjust the motor outputs to compensate for motor deadzone
     if (abs(angle) < 45) {
       motorOut(Output * 1.3, -Output * 1.3);
     } else {
@@ -443,6 +445,8 @@ void turn(int angle) {
   
 }
 
+//main function for using IMU and PID for a yaw controlled straight line motion
+//checkPING variable used to tell the robot whether to stop when an obstacle is within a threshold distance (used for functions that may require the robot to be closer than it would normally be, such as disinfection and vial tasks)
 void straight(int t, boolean checkPing) {
   double starting = getYaw();
   double targetAbs = starting;
@@ -476,6 +480,7 @@ void straight(int t, boolean checkPing) {
   delay(250);
 }
 
+//same as the straight(int t), except this one is for backing up
 void backStraight(int t) {
   double starting = getYaw();
   double targetAbs = starting;
@@ -502,6 +507,7 @@ void backStraight(int t) {
   delay(250);
 }
 
+//slow inching forward motion for moving while the robot has its gripper arm lowered (too front heavy, cant accelerate too quickly or the robot will tip over)
 void forwardSlow() {
 
   while (readPING() > 17.5) {
@@ -512,6 +518,7 @@ void forwardSlow() {
   //straight(500);
 }
 
+//slow backing up motion for moving while the robot has its gripper arm lowered
 void backSlow() {
 
   while (readPING() < 25) {
@@ -523,6 +530,10 @@ void backSlow() {
 }
 
 /****************************IMU Functions****************************/
+/*
+ * series of functions that are used to properly get yaw from IMU, and also get the targetHeading reading when used in turning commands
+ * as well as caluclating the error for PID
+ */
 double getYaw() {
   sensors_event_t event; 
   bno.getEvent(&event);
@@ -785,14 +796,17 @@ void takeTemp() {
   double init_temp = mlx.readObjectTempF();
   displayString("Place wrist under gripper arm.", 0, 0);
   radioSend("Waiting for wrist");
+
+  //wait for a sudden temperature spike as a detection of wrist
   while (mlx.readObjectTempF() < init_temp + 8) {
     Serial.println(mlx.readObjectTempF());
     delay(100);
   }
-  //Serial.println(mlx.readObjectTempF());
   radioSend("Wrist detected, taking temp");
   displayString("Currently Reading Temp.", 0, 0);
   double total = 0;
+
+  //take 50 readings, return average on display
   for (int i = 0; i < 50; i++) {
     Serial.println(mlx.readObjectTempF());
     total += mlx.readObjectTempF();
@@ -803,7 +817,7 @@ void takeTemp() {
   
   
   radioSend(String(total) + " °F.");
-  displayString("Your Temp is \n" + String(mlx.readObjectTempF()) + " °F.", 5000, 1);
+  displayString("Your Temp is \n" + String(total) + " °F.", 5000, 1);
   
   liftGripper();
 }

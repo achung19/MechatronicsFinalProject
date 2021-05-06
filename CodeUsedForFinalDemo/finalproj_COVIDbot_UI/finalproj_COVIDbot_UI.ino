@@ -6,7 +6,10 @@ RF24 radio(7, 8); // CE, CSN pins
 const byte address[6] = "00001";
 
 #define numCommands 10
+
+//acceptable commands, everything else gets cut
 const char *validCmd[numCommands] = {"pickup", "dropoff", "disinfect", "temp", "obs", "line", "test1", "test2", "test3", "color"};
+//commands that require the user to give arguments (turning time or straight line time): relies on separate substring checking 
 String substr[4] = {"turn:+", "straight:+", "turn:-", "straight:-"};
 
 void setup() {
@@ -17,6 +20,8 @@ void setup() {
 }
 
 void loop() {
+
+  //set the system default to accept reports from the robot radio
   setRadioRead();
 
   if (radio.available()) {
@@ -24,7 +29,8 @@ void loop() {
     radio.read(&text, sizeof(text));
     Serial.println("Received: " + String(text));
   }
-  
+
+  //when there is a command to be sent, switch to send mode, and send command text after checking the commands
   if(Serial.available() > 0) {
 
     setRadioWrite();
@@ -47,6 +53,7 @@ void loop() {
   
 }
 
+//command checker
 boolean isValid(char cmd[], String str) {
   
   for (int i = 0; i < numCommands; i++) {
@@ -64,7 +71,7 @@ boolean isValid(char cmd[], String str) {
  
 }
 
-
+//functions to set radio mode (sending/receiving)
 void setRadioWrite() {
   radio.openWritingPipe(address);
   radio.setPALevel(RF24_PA_MIN);
