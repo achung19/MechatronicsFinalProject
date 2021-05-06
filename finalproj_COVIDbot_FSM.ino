@@ -159,9 +159,10 @@ void loop() {
       break;
     } 
     case 2: { //obstacle ovidance
-      //if obstacle detected, follow edge of obstacle
-      //re-find path, then
-      if(!obstacleDetected()) { 
+      //if obstacle detected, follow edge of obstacle, & re-find path
+      char c = colorDetected();
+      if(c == curr || c == destination) { 
+        //check that robot has re-found path
         state = 1;
       } else {
         straight(5000, 1);
